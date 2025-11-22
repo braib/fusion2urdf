@@ -48,14 +48,16 @@ class Joint:
         Generate the joint_xml and hold it by self.joint_xml
         """
         joint = Element('joint')
-        joint.attrib = {'name':self.name, 'type':self.type}
+        # Joint name is lowercase
+        joint.attrib = {'name': self.name, 'type': self.type}
         
         origin = SubElement(joint, 'origin')
         origin.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':'0 0 0'}
         parent = SubElement(joint, 'parent')
-        parent.attrib = {'link':self.parent}
+        # Parent and child are already lowercase unique names
+        parent.attrib = {'link': self.parent}
         child = SubElement(joint, 'child')
-        child.attrib = {'link':self.child}
+        child.attrib = {'link': self.child}
         if self.type == 'revolute' or self.type == 'continuous' or self.type == 'prismatic':        
             axis = SubElement(joint, 'axis')
             axis.attrib = {'xyz':' '.join([str(_) for _ in self.axis])}
@@ -79,18 +81,19 @@ class Joint:
         """        
         
         tran = Element('transmission')
-        tran.attrib = {'name':self.name + '_tran'}
+        # Joint name is already lowercase
+        tran.attrib = {'name': self.name + '_tran'}
         
         joint_type = SubElement(tran, 'type')
         joint_type.text = 'transmission_interface/SimpleTransmission'
         
         joint = SubElement(tran, 'joint')
-        joint.attrib = {'name':self.name}
+        joint.attrib = {'name': self.name}
         hardwareInterface_joint = SubElement(joint, 'hardwareInterface')
         hardwareInterface_joint.text = 'hardware_interface/EffortJointInterface'
         
         actuator = SubElement(tran, 'actuator')
-        actuator.attrib = {'name':self.name + '_actr'}
+        actuator.attrib = {'name': self.name + '_actr'}
         hardwareInterface_actr = SubElement(actuator, 'hardwareInterface')
         hardwareInterface_actr.text = 'hardware_interface/EffortJointInterface'
         mechanicalReduction = SubElement(actuator, 'mechanicalReduction')
@@ -119,7 +122,7 @@ def is_base_link(component_name):
     return clean_name == 'base_link'
 
 
-def make_joints_dict(root, msg):
+def make_joints_dict(root, msg, name_manager=None):
     """
     joints_dict holds parent, axis and xyz information of the joints
     
@@ -130,6 +133,8 @@ def make_joints_dict(root, msg):
         Root component
     msg: str
         Tell the status
+    name_manager: NameManager
+        Manager for handling unique names
         
     Returns
     ----------
@@ -190,12 +195,28 @@ def make_joints_dict(root, msg):
         elif joint_type == 'fixed':
             pass
         
-        # Check if occurrenceTwo is base_link (with version handling)
-        if is_base_link(joint.occurrenceTwo.component.name):
-            joint_dict['parent'] = 'base_link'
+        # Get unique names for parent and child using name manager
+        if name_manager:
+            # Check if occurrenceTwo is base_link (with version handling)
+            if is_base_link(joint.occurrenceTwo.component.name):
+                joint_dict['parent'] = 'base_link'
+            else:
+                parent_name = name_manager.get_link_name_for_occurrence(joint.occurrenceTwo.name)
+                if parent_name is None:
+                    parent_name = name_manager.get_unique_link_name(joint.occurrenceTwo.name, joint.occurrenceTwo.component.name)
+                joint_dict['parent'] = parent_name
+            
+            child_name = name_manager.get_link_name_for_occurrence(joint.occurrenceOne.name)
+            if child_name is None:
+                child_name = name_manager.get_unique_link_name(joint.occurrenceOne.name, joint.occurrenceOne.component.name)
+            joint_dict['child'] = child_name
         else:
-            joint_dict['parent'] = re.sub('[ :()]', '_', joint.occurrenceTwo.name)
-        joint_dict['child'] = re.sub('[ :()]', '_', joint.occurrenceOne.name)
+            # Fallback to old behavior
+            if is_base_link(joint.occurrenceTwo.component.name):
+                joint_dict['parent'] = 'base_link'
+            else:
+                joint_dict['parent'] = re.sub('[ :()]', '_', joint.occurrenceTwo.name)
+            joint_dict['child'] = re.sub('[ :()]', '_', joint.occurrenceOne.name)
         
         
         #There seem to be a problem with geometryOrOriginTwo. To calculate the correct origin of the generated stl files following approach was used.
@@ -249,5 +270,11 @@ def make_joints_dict(root, msg):
                 msg = joint.name + " doesn't have joint origin. Please set it and run again."
                 break
         
-        joints_dict[joint.name] = joint_dict
+        # Use cleaned joint name
+        if name_manager:
+            clean_joint_name = name_manager.get_unique_joint_name(joint.name)
+        else:
+            clean_joint_name = re.sub('[ :()]', '_', joint.name)
+            
+        joints_dict[clean_joint_name] = joint_dict
     return joints_dict, msg

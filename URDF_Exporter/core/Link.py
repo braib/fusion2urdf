@@ -12,12 +12,12 @@ from ..utils import utils
 
 class Link:
 
-    def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor):
+    def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor, mesh_filename=None):
         """
         Parameters
         ----------
         name: str
-            name of the link
+            name of the link (unique, may have suffix)
         xyz: [x, y, z]
             coordinate for the visual and collision
         center_of_mass: [x, y, z]
@@ -30,6 +30,8 @@ class Link:
             mass of the link
         inertia_tensor: [ixx, iyy, izz, ixy, iyz, ixz]
             tensor of the inertia
+        mesh_filename: str
+            the actual STL filename (without suffix, lowercase)
         """
         self.name = name
         # xyz for visual
@@ -40,6 +42,7 @@ class Link:
         self.repo = repo
         self.mass = mass
         self.inertia_tensor = inertia_tensor
+        self.mesh_filename = mesh_filename if mesh_filename else name
         
     def make_link_xml(self):
         """
@@ -47,7 +50,8 @@ class Link:
         """
         
         link = Element('link')
-        link.attrib = {'name':self.name}
+        # Link name is unique (may have _1, _2 suffix) and lowercase
+        link.attrib = {'name': self.name}
         
         #inertial
         inertial = SubElement(link, 'inertial')
@@ -67,7 +71,8 @@ class Link:
         origin_v.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':'0 0 0'}
         geometry_v = SubElement(visual, 'geometry')
         mesh_v = SubElement(geometry_v, 'mesh')
-        mesh_v.attrib = {'filename':'package://' + self.repo + self.name + '.stl','scale':'0.001 0.001 0.001'}
+        # Use mesh_filename (without suffix, lowercase)
+        mesh_v.attrib = {'filename':'package://' + self.repo + self.mesh_filename + '.stl','scale':'0.001 0.001 0.001'}
         material = SubElement(visual, 'material')
         material.attrib = {'name':'silver'}
         
@@ -77,7 +82,8 @@ class Link:
         origin_c.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':'0 0 0'}
         geometry_c = SubElement(collision, 'geometry')
         mesh_c = SubElement(geometry_c, 'mesh')
-        mesh_c.attrib = {'filename':'package://' + self.repo + self.name + '.stl','scale':'0.001 0.001 0.001'}
+        # Use mesh_filename (without suffix, lowercase)
+        mesh_c.attrib = {'filename':'package://' + self.repo + self.mesh_filename + '.stl','scale':'0.001 0.001 0.001'}
 
         # print("\n".join(utils.prettify(link).split("\n")[1:]))
         self.link_xml = "\n".join(utils.prettify(link).split("\n")[1:])
@@ -103,7 +109,7 @@ def is_base_link(component_name):
     return clean_name == 'base_link'
 
 
-def make_inertial_dict(root, msg):
+def make_inertial_dict(root, msg, name_manager=None):
     """      
     Parameters
     ----------
@@ -111,10 +117,12 @@ def make_inertial_dict(root, msg):
         Root component
     msg: str
         Tell the status
+    name_manager: NameManager
+        Manager for handling unique names
         
     Returns
     ----------
-    inertial_dict: {name:{mass, inertia, center_of_mass}}
+    inertial_dict: {unique_name: {mass, inertia, center_of_mass, mesh_filename}}
     
     msg: str
         Tell the status
@@ -128,7 +136,16 @@ def make_inertial_dict(root, msg):
         occs_dict = {}
         prop = occs.getPhysicalProperties(adsk.fusion.CalculationAccuracy.VeryHighCalculationAccuracy)
         
-        occs_dict['name'] = re.sub('[ :()]', '_', occs.name)
+        # Get unique name for this occurrence and mesh filename
+        if name_manager:
+            unique_name = name_manager.get_unique_link_name(occs.name, occs.component.name)
+            mesh_filename = name_manager.get_mesh_filename(occs.component.name)
+        else:
+            unique_name = re.sub('[ :(),]', '_', occs.name).lower()
+            mesh_filename = unique_name
+        
+        occs_dict['name'] = unique_name
+        occs_dict['mesh_filename'] = mesh_filename
 
         mass = prop.mass  # kg
         occs_dict['mass'] = mass
@@ -144,6 +161,6 @@ def make_inertial_dict(root, msg):
         if is_base_link(occs.component.name):
             inertial_dict['base_link'] = occs_dict
         else:
-            inertial_dict[re.sub('[ :()]', '_', occs.name)] = occs_dict
+            inertial_dict[unique_name] = occs_dict
 
     return inertial_dict, msg

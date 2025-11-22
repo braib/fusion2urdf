@@ -37,10 +37,12 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
     with open(file_name, mode='a') as f:
         # for base_link
         center_of_mass = inertial_dict['base_link']['center_of_mass']
+        mesh_filename = inertial_dict['base_link'].get('mesh_filename', 'base_link')
         link = Link.Link(name='base_link', xyz=[0,0,0], 
             center_of_mass=center_of_mass, repo=repo,
             mass=inertial_dict['base_link']['mass'],
-            inertia_tensor=inertial_dict['base_link']['inertia'])
+            inertia_tensor=inertial_dict['base_link']['inertia'],
+            mesh_filename=mesh_filename)
         links_xyz_dict[link.name] = link.xyz
         link.make_link_xml()
         f.write(link.link_xml)
@@ -51,10 +53,12 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
             name = joints_dict[joint]['child']
             center_of_mass = \
                 [ i-j for i, j in zip(inertial_dict[name]['center_of_mass'], joints_dict[joint]['xyz'])]
+            mesh_filename = inertial_dict[name].get('mesh_filename', name)
             link = Link.Link(name=name, xyz=joints_dict[joint]['xyz'],\
                 center_of_mass=center_of_mass,\
                 repo=repo, mass=inertial_dict[name]['mass'],\
-                inertia_tensor=inertial_dict[name]['inertia'])
+                inertia_tensor=inertial_dict[name]['inertia'],
+                mesh_filename=mesh_filename)
             links_xyz_dict[link.name] = link.xyz            
             link.make_link_xml()
             f.write(link.link_xml)
@@ -375,6 +379,7 @@ def write_control_launch(package_name, robot_name, save_dir, joints_dict):
     for j in joints_dict:
         joint_type = joints_dict[j]['type']
         if joint_type != 'fixed':
+            # Joint names are already lowercase
             controller_args_str += j + '_position_controller '
     controller_args_str += 'joint_state_controller '
 
@@ -437,6 +442,7 @@ def write_yaml(package_name, robot_name, save_dir, joints_dict):
         for joint in joints_dict:
             joint_type = joints_dict[joint]['type']
             if joint_type != 'fixed':
+                # Joint names are already lowercase
                 f.write('  ' + joint + '_position_controller:\n')
                 f.write('    type: effort_controllers/JointPositionController\n')
                 f.write('    joint: '+ joint + '\n')

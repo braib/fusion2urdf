@@ -35,9 +35,16 @@ def is_base_link(component_name):
     return clean_name == 'base_link'
 
 
-def copy_occs(root):    
+def copy_occs(root, name_manager=None):    
     """    
     duplicate all the components - creates new clean copies for STL export
+    
+    Parameters
+    ----------
+    root: adsk.fusion.Design.cast(product)
+        Root component
+    name_manager: NameManager
+        Manager for handling unique names
     """    
     allOccs = root.occurrences
     
@@ -46,10 +53,18 @@ def copy_occs(root):
     for i in range(allOccs.count):
         occs = allOccs.item(i)
         if occs.bRepBodies.count > 0:
+            # Get unique name from name manager
+            if name_manager:
+                unique_name = name_manager.get_unique_link_name(occs.name, occs.component.name)
+            else:
+                unique_name = re.sub('[ :(),]', '_', occs.component.name)
+                unique_name = re.sub('_+', '_', unique_name).strip('_')
+            
             occ_info = {
                 'occurrence': occs,
                 'component': occs.component,
                 'name': occs.name,
+                'unique_name': unique_name,
                 'is_base_link': is_base_link(occs.component.name)
             }
             occ_info_list.append(occ_info)
@@ -68,7 +83,7 @@ def copy_occs(root):
             if occ_info['is_base_link']:
                 new_occs.component.name = 'base_link'
             else:
-                new_occs.component.name = re.sub('[ :()]', '_', occ_info['name'])
+                new_occs.component.name = occ_info['unique_name']
             
             # Get the newly created occurrence
             new_occs = allOccs.item(allOccs.count - 1)
@@ -103,7 +118,7 @@ def copy_occs(root):
             continue
 
 
-def export_stl(design, save_dir, components):  
+def export_stl(design, save_dir, components, name_manager=None):  
     """
     export stl files into "save_dir/"
     
@@ -113,6 +128,8 @@ def export_stl(design, save_dir, components):
     save_dir: str
         directory path to save
     components: design.allComponents
+    name_manager: NameManager
+        Manager for handling unique names
     """
           
     # create a single exportManager instance
@@ -121,14 +138,34 @@ def export_stl(design, save_dir, components):
     try: os.mkdir(save_dir + '/meshes')
     except: pass
     scriptDir = save_dir + '/meshes'  
+    
+    # Track which meshes we've already exported
+    exported_meshes = set()
+    
     # export the occurrence one by one in the component to a specified file
     for component in components:
         allOccus = component.allOccurrences
         for occ in allOccus:
             if 'old_component' not in occ.component.name:
                 try:
-                    print(occ.component.name)
-                    fileName = scriptDir + "/" + occ.component.name              
+                    # Get mesh filename (without uniqueness suffix, lowercase)
+                    if name_manager:
+                        mesh_filename = name_manager.get_mesh_filename(occ.component.name)
+                    else:
+                        # Clean the component name: remove commas, replace spaces and special characters with underscores, lowercase
+                        mesh_filename = occ.component.name.replace(',', '')
+                        mesh_filename = re.sub('[ :()]', '_', mesh_filename)
+                        mesh_filename = re.sub('_+', '_', mesh_filename).strip('_')
+                        mesh_filename = mesh_filename.lower()
+                    
+                    # Only export each unique mesh once
+                    if mesh_filename in exported_meshes:
+                        print(f'Skipping duplicate: {mesh_filename} (already exported)')
+                        continue
+                    
+                    print(f'Exporting: {mesh_filename}.stl')
+                    fileName = scriptDir + "/" + mesh_filename
+                    
                     # create stl exportOptions
                     stlExportOptions = exportMgr.createSTLExportOptions(occ, fileName)
                     stlExportOptions.sendToPrintUtility = False
@@ -136,8 +173,12 @@ def export_stl(design, save_dir, components):
                     # options are .MeshRefinementLow .MeshRefinementMedium .MeshRefinementHigh
                     stlExportOptions.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementLow
                     exportMgr.execute(stlExportOptions)
-                except:
-                    print('Component ' + occ.component.name + ' has something wrong.')
+                    
+                    exported_meshes.add(mesh_filename)
+                    
+                except Exception as e:
+                    print('Component ' + occ.component.name + ' has something wrong: ' + str(e))
+
 
 
 def file_dialog(ui):     

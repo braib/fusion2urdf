@@ -1,12 +1,79 @@
 #Author-syuntoku14
 #Description-Generate URDF file from Fusion 360
-#Modified to handle Fusion 360 versioned component names
+#Modified to handle Fusion 360 versioned component names and duplicate names
 
 import adsk, adsk.core, adsk.fusion, traceback
 import os
 import sys
+
+# Add the path to import NameManager
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+
 from .utils import utils
 from .core import Link, Joint, Write
+
+# Import or define NameManager
+try:
+    from .utils.name_manager import NameManager
+except:
+    # If import fails, define it inline
+    import re
+    
+    class NameManager:
+        def __init__(self):
+            self.link_name_map = {}
+            self.link_name_counts = {}
+            self.used_names = set()
+            
+        def clean_name(self, name):
+            cleaned = name.replace(',', '')
+            cleaned = re.sub('[ :()]', '_', cleaned)
+            cleaned = re.sub('_+', '_', cleaned)
+            cleaned = cleaned.strip('_')
+            return cleaned
+        
+        def get_unique_link_name(self, occurrence_name, component_name):
+            if occurrence_name in self.link_name_map:
+                return self.link_name_map[occurrence_name]
+            
+            base_name = self.clean_name(component_name)
+            
+            if base_name.lower() == 'base_link':
+                unique_name = 'base_link'
+                if unique_name not in self.used_names:
+                    self.link_name_map[occurrence_name] = unique_name
+                    self.used_names.add(unique_name)
+                    return unique_name
+            
+            if base_name in self.link_name_counts:
+                self.link_name_counts[base_name] += 1
+                unique_name = f"{base_name}_{self.link_name_counts[base_name]}"
+            else:
+                if base_name in self.used_names:
+                    self.link_name_counts[base_name] = 1
+                    unique_name = f"{base_name}_1"
+                else:
+                    self.link_name_counts[base_name] = 0
+                    unique_name = base_name
+            
+            self.link_name_map[occurrence_name] = unique_name
+            self.used_names.add(unique_name)
+            return unique_name
+        
+        def get_link_name_for_occurrence(self, occurrence_name):
+            return self.link_name_map.get(occurrence_name)
+        
+        def get_unique_joint_name(self, joint_name):
+            return self.clean_name(joint_name)
+        
+        def print_mapping(self):
+            print("\n=== Link Name Mapping ===")
+            for original, unique in sorted(self.link_name_map.items()):
+                if original != unique:
+                    print(f"{original} -> {unique}")
+            print("========================\n")
 
 """
 # length unit is 'cm' and inertial unit is 'kg/cm^2'
@@ -38,6 +105,9 @@ def run(context):
         root = design.rootComponent  # root component 
         components = design.allComponents
         
+        # Initialize NameManager for handling duplicate names
+        name_manager = NameManager()
+        
         # set the names        
         robot_name = root.name.split()[0]
         package_name = robot_name + '_description'
@@ -58,14 +128,8 @@ def run(context):
         # --------------------
         # set dictionaries
         
-        # Generate joints_dict. All joints are related to root. 
-        joints_dict, msg = Joint.make_joints_dict(root, msg)
-        if msg != success_msg:
-            ui.messageBox(msg, title)
-            return 0   
-        
-        # Generate inertial_dict
-        inertial_dict, msg = Link.make_inertial_dict(root, msg)
+        # Generate inertial_dict first to populate name_manager
+        inertial_dict, msg = Link.make_inertial_dict(root, msg, name_manager)
         if msg != success_msg:
             ui.messageBox(msg, title)
             return 0
@@ -89,6 +153,15 @@ def run(context):
                 ui.messageBox(msg, title)
                 return 0
         
+        # Generate joints_dict using the populated name_manager
+        joints_dict, msg = Joint.make_joints_dict(root, msg, name_manager)
+        if msg != success_msg:
+            ui.messageBox(msg, title)
+            return 0   
+        
+        # Print name mapping for debugging
+        name_manager.print_mapping()
+        
         links_xyz_dict = {}
         
         # --------------------
@@ -107,9 +180,9 @@ def run(context):
         utils.update_cmakelists(save_dir, package_name)
         utils.update_package_xml(save_dir, package_name)
         
-        # Generate STL files        
-        utils.copy_occs(root)
-        utils.export_stl(design, save_dir, components)   
+        # Generate STL files with unique names
+        utils.copy_occs(root, name_manager)
+        utils.export_stl(design, save_dir, components, name_manager)   
         
         ui.messageBox(msg, title)
         

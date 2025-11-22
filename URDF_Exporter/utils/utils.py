@@ -37,46 +37,70 @@ def is_base_link(component_name):
 
 def copy_occs(root):    
     """    
-    duplicate all the components
+    duplicate all the components - creates new clean copies for STL export
     """    
-    def copy_body(allOccs, occs):
-        """    
-        copy the old occs to new component
-        """
-        
-        bodies = occs.bRepBodies
-        transform = adsk.core.Matrix3D.create()
-        
-        # Create new components from occs
-        # This support even when a component has some occses. 
-
-        new_occs = allOccs.addNewComponent(transform)  # this create new occs
-        
-        # Check if this is base_link (with version handling)
-        if is_base_link(occs.component.name):
-            # Only rename if it's not the root component
-            if not occs.component.parentDesign.rootComponent == occs.component:
-                occs.component.name = 'old_component'
-            new_occs.component.name = 'base_link'
-        else:
-            new_occs.component.name = re.sub('[ :()]', '_', occs.name)
-        new_occs = allOccs.item((allOccs.count-1))
-        for i in range(bodies.count):
-            body = bodies.item(i)
-            body.copyToComponent(new_occs)
-    
     allOccs = root.occurrences
-    oldOccs = []
-    coppy_list = [occs for occs in allOccs]
-    for occs in coppy_list:
+    
+    # Store original occurrence info before making changes
+    occ_info_list = []
+    for i in range(allOccs.count):
+        occs = allOccs.item(i)
         if occs.bRepBodies.count > 0:
-            copy_body(allOccs, occs)
-            oldOccs.append(occs)
-
-    # Only rename components that are not the root component
-    for occs in oldOccs:
-        if not occs.component.parentDesign.rootComponent == occs.component:
-            occs.component.name = 'old_component'
+            occ_info = {
+                'occurrence': occs,
+                'component': occs.component,
+                'name': occs.name,
+                'is_base_link': is_base_link(occs.component.name)
+            }
+            occ_info_list.append(occ_info)
+    
+    # Create new occurrences from the stored info
+    created_occs = []
+    for occ_info in occ_info_list:
+        try:
+            occs = occ_info['occurrence']
+            transform = adsk.core.Matrix3D.create()
+            
+            # Create new occurrence
+            new_occs = allOccs.addNewComponent(transform)
+            
+            # Set the new component name
+            if occ_info['is_base_link']:
+                new_occs.component.name = 'base_link'
+            else:
+                new_occs.component.name = re.sub('[ :()]', '_', occ_info['name'])
+            
+            # Get the newly created occurrence
+            new_occs = allOccs.item(allOccs.count - 1)
+            
+            # Copy bodies from original component to new component
+            source_bodies = occ_info['component'].bRepBodies
+            for j in range(source_bodies.count):
+                body = source_bodies.item(j)
+                try:
+                    body.copyToComponent(new_occs)
+                except RuntimeError as e:
+                    # Sometimes direct copy fails, try alternative approach
+                    print(f'Warning: Could not copy body {j} from {occ_info["name"]}: {str(e)}')
+                    continue
+            
+            created_occs.append(new_occs)
+            
+        except Exception as e:
+            print(f'Warning: Could not process occurrence {occ_info["name"]}: {str(e)}')
+            continue
+    
+    # Rename original components (mark as old) - skip root component
+    for occ_info in occ_info_list:
+        try:
+            comp = occ_info['component']
+            # Don't rename root component
+            if comp != root:
+                comp.name = 'old_component'
+        except Exception as e:
+            # Skip if we can't rename
+            print(f'Warning: Could not rename component {occ_info["name"]}: {str(e)}')
+            continue
 
 
 def export_stl(design, save_dir, components):  

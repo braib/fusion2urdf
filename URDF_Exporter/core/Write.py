@@ -3,6 +3,7 @@
 Created on Sun May 12 20:46:26 2019
 
 @author: syuntoku
+Modified to fix directory creation issues
 """
 
 import adsk, os
@@ -119,11 +120,13 @@ def write_gazebo_endtag(file_name):
         
 
 def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
-    try: os.mkdir(save_dir + '/urdf')
-    except: pass 
+    # Create urdf directory if it doesn't exist
+    urdf_dir = os.path.join(save_dir, 'urdf')
+    os.makedirs(urdf_dir, exist_ok=True)
 
-    file_name = save_dir + '/urdf/' + robot_name + '.xacro'  # the name of urdf file
-    repo = package_name + '/meshes/'  # the repository of binary stl files
+    file_name = os.path.join(urdf_dir, robot_name + '.xacro')
+    repo = package_name + '/meshes/'
+    
     with open(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro">\n'.format(robot_name))
@@ -140,10 +143,12 @@ def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_n
     write_gazebo_endtag(file_name)
 
 def write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
-    try: os.mkdir(save_dir + '/urdf')
-    except: pass  
+    # Create urdf directory if it doesn't exist
+    urdf_dir = os.path.join(save_dir, 'urdf')
+    os.makedirs(urdf_dir, exist_ok=True)
 
-    file_name = save_dir + '/urdf/materials.xacro'  # the name of urdf file
+    file_name = os.path.join(urdf_dir, 'materials.xacro')
+    
     with open(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
@@ -170,8 +175,12 @@ def write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, packag
     file_name: str
         urdf full path
     """
+    # Create urdf directory if it doesn't exist
+    urdf_dir = os.path.join(save_dir, 'urdf')
+    os.makedirs(urdf_dir, exist_ok=True)
     
-    file_name = save_dir + '/urdf/{}.trans'.format(robot_name)  # the name of urdf file
+    file_name = os.path.join(urdf_dir, robot_name + '.trans')
+    
     with open(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
@@ -206,12 +215,13 @@ to swap component1<=>component2"
         f.write('</robot>\n')
 
 def write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
-    try: os.mkdir(save_dir + '/urdf')
-    except: pass  
+    # Create urdf directory if it doesn't exist
+    urdf_dir = os.path.join(save_dir, 'urdf')
+    os.makedirs(urdf_dir, exist_ok=True)
 
-    file_name = save_dir + '/urdf/' + robot_name + '.gazebo'  # the name of urdf file
-    repo = robot_name + '/meshes/'  # the repository of binary stl files
-    #repo = package_name + '/' + robot_name + '/bin_stl/'  # the repository of binary stl files
+    file_name = os.path.join(urdf_dir, robot_name + '.gazebo')
+    repo = robot_name + '/meshes/'
+    
     with open(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
@@ -260,8 +270,9 @@ def write_display_launch(package_name, robot_name, save_dir):
     save_dir: str
     path of the repository to save
     """   
-    try: os.mkdir(save_dir + '/launch')
-    except: pass     
+    # Create launch directory if it doesn't exist
+    launch_dir = os.path.join(save_dir, 'launch')
+    os.makedirs(launch_dir, exist_ok=True)
 
     launch = Element('launch')     
 
@@ -291,7 +302,7 @@ def write_display_launch(package_name, robot_name, save_dir):
 
     launch_xml = "\n".join(utils.prettify(launch).split("\n")[1:])        
 
-    file_name = save_dir + '/launch/display.launch'    
+    file_name = os.path.join(launch_dir, 'display.launch')
     with open(file_name, mode='w') as f:
         f.write(launch_xml)
 
@@ -307,9 +318,9 @@ def write_gazebo_launch(package_name, robot_name, save_dir):
     save_dir: str
         path of the repository to save
     """
-    
-    try: os.mkdir(save_dir + '/launch')
-    except: pass     
+    # Create launch directory if it doesn't exist
+    launch_dir = os.path.join(save_dir, 'launch')
+    os.makedirs(launch_dir, exist_ok=True)
     
     launch = Element('launch')
     param = SubElement(launch, 'param')
@@ -333,11 +344,9 @@ def write_gazebo_launch(package_name, robot_name, save_dir):
         arg.attrib = {'name' : args_name_value_pairs[i][0] , 
         'value' : args_name_value_pairs[i][1]}
 
-
-    
     launch_xml = "\n".join(utils.prettify(launch).split("\n")[1:])        
     
-    file_name = save_dir + '/launch/' + 'gazebo.launch'    
+    file_name = os.path.join(launch_dir, 'gazebo.launch')
     with open(file_name, mode='w') as f:
         f.write(launch_xml)
 
@@ -356,16 +365,11 @@ def write_control_launch(package_name, robot_name, save_dir, joints_dict):
     joints_dict: dict
         information of the joints
     """
+    # Create launch directory if it doesn't exist
+    launch_dir = os.path.join(save_dir, 'launch')
+    os.makedirs(launch_dir, exist_ok=True)
     
-    try: os.mkdir(save_dir + '/launch')
-    except: pass     
-    
-    #launch = Element('launch')
-
     controller_name = robot_name + '_controller'
-    #rosparam = SubElement(launch, 'rosparam')
-    #rosparam.attrib = {'file':'$(find {})/launch/controller.yaml'.format(package_name),
-    #                   'command':'load'}
                        
     controller_args_str = ""
     for j in joints_dict:
@@ -386,15 +390,13 @@ def write_control_launch(package_name, robot_name, save_dir, joints_dict):
     remap.attrib = {'from':'/joint_states',\
                     'to':'/' + robot_name + '/joint_states'}
     
-    #launch_xml  = "\n".join(utils.prettify(launch).split("\n")[1:])   
     launch_xml  = "\n".join(utils.prettify(node_controller).split("\n")[1:])   
     launch_xml += "\n".join(utils.prettify(node_publisher).split("\n")[1:])   
 
-    file_name = save_dir + '/launch/controller.launch'    
+    file_name = os.path.join(launch_dir, 'controller.launch')
     with open(file_name, mode='w') as f:
         f.write('<launch>\n')
         f.write('\n')
-        #for some reason ROS is very picky about the attribute ordering, so we'll bitbang this element
         f.write('<rosparam file="$(find {})/launch/controller.yaml" command="load"/>'.format(package_name))
         f.write('\n')
         f.write(launch_xml)
@@ -416,11 +418,13 @@ def write_yaml(package_name, robot_name, save_dir, joints_dict):
     joints_dict: dict
         information of the joints
     """
-    try: os.mkdir(save_dir + '/launch')
-    except: pass 
+    # Create launch directory if it doesn't exist
+    launch_dir = os.path.join(save_dir, 'launch')
+    os.makedirs(launch_dir, exist_ok=True)
 
     controller_name = robot_name + '_controller'
-    file_name = save_dir + '/launch/controller.yaml'
+    file_name = os.path.join(launch_dir, 'controller.yaml')
+    
     with open(file_name, 'w') as f:
         f.write(controller_name + ':\n')
         # joint_state_controller
@@ -437,4 +441,3 @@ def write_yaml(package_name, robot_name, save_dir, joints_dict):
                 f.write('    type: effort_controllers/JointPositionController\n')
                 f.write('    joint: '+ joint + '\n')
                 f.write('    pid: {p: 100.0, i: 0.01, d: 10.0}\n')
-

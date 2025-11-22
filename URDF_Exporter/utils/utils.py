@@ -54,7 +54,9 @@ def copy_occs(root):
         
         # Check if this is base_link (with version handling)
         if is_base_link(occs.component.name):
-            occs.component.name = 'old_component'
+            # Only rename if it's not the root component
+            if not occs.component.parentDesign.rootComponent == occs.component:
+                occs.component.name = 'old_component'
             new_occs.component.name = 'base_link'
         else:
             new_occs.component.name = re.sub('[ :()]', '_', occs.name)
@@ -71,8 +73,10 @@ def copy_occs(root):
             copy_body(allOccs, occs)
             oldOccs.append(occs)
 
+    # Only rename components that are not the root component
     for occs in oldOccs:
-        occs.component.name = 'old_component'
+        if not occs.component.parentDesign.rootComponent == occs.component:
+            occs.component.name = 'old_component'
 
 
 def export_stl(design, save_dir, components):  

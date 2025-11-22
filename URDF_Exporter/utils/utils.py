@@ -3,15 +3,37 @@
 Created on Sun May 12 19:15:34 2019
 
 @author: syuntoku
+Modified to handle Fusion 360 versioned component names
 """
 
 import adsk, adsk.core, adsk.fusion
 import os.path, re
 from xml.etree import ElementTree
 from xml.dom import minidom
-import shutil  # Replaced distutils with shutil
+import shutil
 import fileinput
 import sys
+
+
+def is_base_link(component_name):
+    """
+    Check if a component name represents the base_link
+    Handles Fusion 360's version numbering (e.g., "base_link v1", "base_link v2")
+    
+    Parameters
+    ----------
+    component_name: str
+        The component name to check
+        
+    Returns
+    -------
+    bool
+        True if this is a base_link component
+    """
+    # Remove version numbers and whitespace, convert to lowercase for comparison
+    clean_name = component_name.split()[0].lower()
+    return clean_name == 'base_link'
+
 
 def copy_occs(root):    
     """    
@@ -29,7 +51,9 @@ def copy_occs(root):
         # This support even when a component has some occses. 
 
         new_occs = allOccs.addNewComponent(transform)  # this create new occs
-        if occs.component.name == 'base_link':
+        
+        # Check if this is base_link (with version handling)
+        if is_base_link(occs.component.name):
             occs.component.name = 'old_component'
             new_occs.component.name = 'base_link'
         else:
@@ -152,7 +176,7 @@ def copy_package(save_dir, package_dir):
         
         # Check if the package directory exists and copy it
         if os.path.exists(package_dir):
-            shutil.copytree(package_dir, save_dir, dirs_exist_ok=True)  # dirs_exist_ok=True allows overwriting
+            shutil.copytree(package_dir, save_dir, dirs_exist_ok=True)
         else:
             print(f"Package directory '{package_dir}' does not exist.")
         

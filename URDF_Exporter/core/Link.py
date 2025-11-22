@@ -3,6 +3,7 @@
 Created on Sun May 12 20:11:28 2019
 
 @author: syuntoku
+Modified to handle Fusion 360 versioned component names
 """
 
 import adsk, re
@@ -82,6 +83,26 @@ class Link:
         self.link_xml = "\n".join(utils.prettify(link).split("\n")[1:])
 
 
+def is_base_link(component_name):
+    """
+    Check if a component name represents the base_link
+    Handles Fusion 360's version numbering (e.g., "base_link v1", "base_link v2")
+    
+    Parameters
+    ----------
+    component_name: str
+        The component name to check
+        
+    Returns
+    -------
+    bool
+        True if this is a base_link component
+    """
+    # Remove version numbers and whitespace, convert to lowercase for comparison
+    clean_name = component_name.split()[0].lower()
+    return clean_name == 'base_link'
+
+
 def make_inertial_dict(root, msg):
     """      
     Parameters
@@ -119,7 +140,8 @@ def make_inertial_dict(root, msg):
         moment_inertia_world = [_ / 10000.0 for _ in [xx, yy, zz, xy, yz, xz] ] ## kg / cm^2 -> kg/m^2
         occs_dict['inertia'] = utils.origin2center_of_mass(moment_inertia_world, center_of_mass, mass)
         
-        if occs.component.name == 'base_link':
+        # Check if this is base_link (with version handling)
+        if is_base_link(occs.component.name):
             inertial_dict['base_link'] = occs_dict
         else:
             inertial_dict[re.sub('[ :()]', '_', occs.name)] = occs_dict

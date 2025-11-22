@@ -1,5 +1,6 @@
 #Author-syuntoku14
 #Description-Generate URDF file from Fusion 360
+#Modified to handle Fusion 360 versioned component names
 
 import adsk, adsk.core, adsk.fusion, traceback
 import os
@@ -9,14 +10,12 @@ from .core import Link, Joint, Write
 
 """
 # length unit is 'cm' and inertial unit is 'kg/cm^2'
-# If there is no 'body' in the root component, maybe the corrdinates are wrong.
+# If there is no 'body' in the root component, maybe the coordinates are wrong.
 """
 
 # joint effort: 100
 # joint velocity: 100
 # supports "Revolute", "Rigid" and "Slider" joint types
-
-# I'm not sure how prismatic joint acts if there is no limit in fusion model
 
 def run(context):
     ui = None
@@ -31,25 +30,29 @@ def run(context):
         product = app.activeProduct
         design = adsk.fusion.Design.cast(product)
         title = 'Fusion2URDF'
+        
         if not design:
             ui.messageBox('No active Fusion design', title)
             return
-
+        
         root = design.rootComponent  # root component 
         components = design.allComponents
-
+        
         # set the names        
         robot_name = root.name.split()[0]
         package_name = robot_name + '_description'
         save_dir = utils.file_dialog(ui)
+        
         if save_dir == False:
             ui.messageBox('Fusion2URDF was canceled', title)
             return 0
         
         save_dir = save_dir + '/' + package_name
-        try: os.mkdir(save_dir)
-        except: pass     
-
+        try: 
+            os.mkdir(save_dir)
+        except: 
+            pass     
+        
         package_dir = os.path.abspath(os.path.dirname(__file__)) + '/package/'
         
         # --------------------
@@ -66,10 +69,25 @@ def run(context):
         if msg != success_msg:
             ui.messageBox(msg, title)
             return 0
-        elif not 'base_link' in inertial_dict:
-            msg = 'There is no base_link. Please set base_link and run again.'
-            ui.messageBox(msg, title)
-            return 0
+        
+        # Check if base_link exists (with version handling)
+        has_base_link = 'base_link' in inertial_dict
+        
+        if not has_base_link:
+            # Try to find any component that starts with "base_link"
+            base_link_candidates = [key for key in inertial_dict.keys() 
+                                   if key.lower().startswith('base_link')]
+            
+            if base_link_candidates:
+                msg = f'Found component "{base_link_candidates[0]}" but it should be named exactly "base_link" (without version numbers).\n\n'
+                msg += 'The exporter has automatically handled this, but please rename your component to "base_link" in Fusion 360 for clarity.'
+                ui.messageBox(msg, title)
+            else:
+                msg = 'There is no base_link component found.\n\n'
+                msg += 'Please create a component named "base_link" and run again.\n'
+                msg += 'Note: The component name should start with "base_link" (case insensitive).'
+                ui.messageBox(msg, title)
+                return 0
         
         links_xyz_dict = {}
         
@@ -88,8 +106,8 @@ def run(context):
         utils.copy_package(save_dir, package_dir)
         utils.update_cmakelists(save_dir, package_name)
         utils.update_package_xml(save_dir, package_name)
-
-        # Generate STl files        
+        
+        # Generate STL files        
         utils.copy_occs(root)
         utils.export_stl(design, save_dir, components)   
         

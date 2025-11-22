@@ -3,6 +3,7 @@
 Created on Sun May 12 20:17:17 2019
 
 @author: syuntoku
+Modified to handle Fusion 360 versioned component names
 """
 
 import adsk, re
@@ -98,9 +99,29 @@ class Joint:
         self.tran_xml = "\n".join(utils.prettify(tran).split("\n")[1:])
 
 
+def is_base_link(component_name):
+    """
+    Check if a component name represents the base_link
+    Handles Fusion 360's version numbering (e.g., "base_link v1", "base_link v2")
+    
+    Parameters
+    ----------
+    component_name: str
+        The component name to check
+        
+    Returns
+    -------
+    bool
+        True if this is a base_link component
+    """
+    # Remove version numbers and whitespace, convert to lowercase for comparison
+    clean_name = component_name.split()[0].lower()
+    return clean_name == 'base_link'
+
+
 def make_joints_dict(root, msg):
     """
-    joints_dict holds parent, axis and xyz informatino of the joints
+    joints_dict holds parent, axis and xyz information of the joints
     
     
     Parameters
@@ -129,7 +150,7 @@ def make_joints_dict(root, msg):
         joint_type = joint_type_list[joint.jointMotion.jointType]
         joint_dict['type'] = joint_type
         
-        # swhich by the type of the joint
+        # switch by the type of the joint
         joint_dict['axis'] = [0, 0, 0]
         joint_dict['upper_limit'] = 0.0
         joint_dict['lower_limit'] = 0.0
@@ -144,10 +165,10 @@ def make_joints_dict(root, msg):
                 joint_dict['upper_limit'] = round(joint.jointMotion.rotationLimits.maximumValue, 6)
                 joint_dict['lower_limit'] = round(joint.jointMotion.rotationLimits.minimumValue, 6)
             elif max_enabled and not min_enabled:
-                msg = joint.name + 'is not set its lower limit. Please set it and try again.'
+                msg = joint.name + ' is not set its lower limit. Please set it and try again.'
                 break
             elif not max_enabled and min_enabled:
-                msg = joint.name + 'is not set its upper limit. Please set it and try again.'
+                msg = joint.name + ' is not set its upper limit. Please set it and try again.'
                 break
             else:  # if there is no angle limit
                 joint_dict['type'] = 'continuous'
@@ -161,22 +182,23 @@ def make_joints_dict(root, msg):
                 joint_dict['upper_limit'] = round(joint.jointMotion.slideLimits.maximumValue/100, 6)
                 joint_dict['lower_limit'] = round(joint.jointMotion.slideLimits.minimumValue/100, 6)
             elif max_enabled and not min_enabled:
-                msg = joint.name + 'is not set its lower limit. Please set it and try again.'
+                msg = joint.name + ' is not set its lower limit. Please set it and try again.'
                 break
             elif not max_enabled and min_enabled:
-                msg = joint.name + 'is not set its upper limit. Please set it and try again.'
+                msg = joint.name + ' is not set its upper limit. Please set it and try again.'
                 break
         elif joint_type == 'fixed':
             pass
         
-        if joint.occurrenceTwo.component.name == 'base_link':
+        # Check if occurrenceTwo is base_link (with version handling)
+        if is_base_link(joint.occurrenceTwo.component.name):
             joint_dict['parent'] = 'base_link'
         else:
             joint_dict['parent'] = re.sub('[ :()]', '_', joint.occurrenceTwo.name)
         joint_dict['child'] = re.sub('[ :()]', '_', joint.occurrenceOne.name)
         
         
-        #There seem to be a problem with geometryOrOriginTwo. To calcualte the correct orogin of the generated stl files following approach was used.
+        #There seem to be a problem with geometryOrOriginTwo. To calculate the correct origin of the generated stl files following approach was used.
         #https://forums.autodesk.com/t5/fusion-360-api-and-scripts/difference-of-geometryororiginone-and-geometryororiginonetwo/m-p/9837767
         #Thanks to Masaki Yamamoto!
         
